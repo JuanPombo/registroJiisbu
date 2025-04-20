@@ -1,67 +1,88 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Escanear QR</title>
-  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro de Asistencia</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
-      text-align: center;
+      max-width: 800px;
+      margin: 0 auto;
       padding: 20px;
+      text-align: center;
     }
-    #reader {
+    #qr-reader {
       width: 100%;
-      max-width: 500px;
       margin: 20px auto;
     }
-    #status {
+    #qr-result {
       margin-top: 20px;
-      font-weight: bold;
+      padding: 10px;
+      border: 1px solid #ddd;
+    }
+    button {
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <h1>Escanea tu código QR</h1>
-  <div id="reader"></div>
-  <p id="status">Esperando escaneo...</p>
-
+  <h1>Registro de Asistencia</h1>
+  <p>Escanea tu código QR para registrar tu asistencia</p>
+  
+  <div id="qr-reader" style="width: 500px"></div>
+  <div id="qr-result"></div>
+  
   <script>
-    const html5QrCode = new Html5Qrcode("reader");
-    let scanned = false;
-
+    const qrResult = document.getElementById('qr-result');
+    const qrReader = new Html5Qrcode("qr-reader");
+    
     function onScanSuccess(decodedText) {
-      if (scanned) return; // evitar múltiples lecturas
-      scanned = true;
-
-      document.getElementById("status").innerText = `Cédula escaneada: ${decodedText}`;
-
-      fetch('https://registrojiisbu.onrender.com/update_sheet', {
+      qrResult.innerHTML = `Registrando: ${decodedText}...`;
+      
+      fetch('/update_sheet', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ cedula: decodedText })
       })
-      
       .then(response => response.json())
       .then(data => {
-        console.log(data);
-        document.getElementById("status").innerText = data.message;
+        qrResult.innerHTML = data.message;
+        qrReader.stop().catch(() => {});
+        setTimeout(() => {
+          qrResult.innerHTML = '';
+          qrReader.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: 250 },
+            onScanSuccess
+          ).catch(console.error);
+        }, 2000);
       })
-      .catch(() => {
-        document.getElementById("status").innerText = "Error de conexión con el servidor.";
+      .catch(error => {
+        qrResult.innerHTML = `Error: ${error.message}`;
       });
     }
 
-    html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 250 },
-      onScanSuccess
-    ).catch(err => {
-      document.getElementById("status").innerText = "Error al iniciar la cámara: " + err;
-    });
+    function startScanner() {
+      qrReader.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        onScanSuccess
+      ).catch(error => {
+        qrResult.innerHTML = `Error al iniciar cámara: ${error}`;
+      });
+    }
+
+    // Iniciar automáticamente al cargar la página
+    window.addEventListener('DOMContentLoaded', startScanner);
   </script>
 </body>
 </html>
