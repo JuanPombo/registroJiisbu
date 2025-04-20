@@ -4,75 +4,173 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Registro de Asistencia</title>
-  <!-- Cambia la URL del script por una más confiable -->
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
+  <!-- Carga la librería desde CDN oficial -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
   <style>
-    /* Tus estilos actuales... */
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      text-align: center;
+    }
+    #qr-container {
+      position: relative;
+      width: 100%;
+      max-width: 500px;
+      margin: 20px auto;
+    }
+    #qr-reader {
+      width: 100%;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+    }
+    #qr-result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 5px;
+      background: #f8f9fa;
+      min-height: 50px;
+    }
+    .btn {
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    .error {
+      color: #dc3545;
+    }
+    .success {
+      color: #28a745;
+    }
+    .hidden {
+      display: none;
+    }
+    #loader {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
   </style>
 </head>
 <body>
-  <!-- Tu contenido actual... -->
+  <h1>Registro de Asistencia</h1>
+  <p>Escanea tu código QR para registrar tu asistencia</p>
+  
+  <div id="qr-container">
+    <div id="qr-reader"></div>
+    <div id="loader" class="hidden">Cargando escáner...</div>
+  </div>
+  <div id="qr-result"></div>
+  <button id="start-btn" class="btn">Iniciar Escáner</button>
   
   <script>
-    // Verifica primero que la librería esté cargada
-    if (typeof Html5Qrcode === 'undefined') {
-      console.error('Html5Qrcode no está disponible');
-      document.getElementById('qr-result').innerHTML = 
-        '<span class="error">Error: No se pudo cargar el escáner. Recarga la página.</span>';
-    } else {
-      console.log('Html5Qrcode cargado correctamente');
-      
+    // Espera a que todo el DOM esté cargado
+    document.addEventListener('DOMContentLoaded', function() {
       const qrResult = document.getElementById('qr-result');
       const startBtn = document.getElementById('start-btn');
-      let qrScanner;
+      const loader = document.getElementById('loader');
+      let qrScanner = null;
+
+      // Verifica que todos los elementos existan
+      if (!qrResult || !startBtn) {
+        console.error('Elementos críticos no encontrados');
+        return;
+      }
+
+      // Muestra mensaje de error seguro
+      function showError(message) {
+        if (qrResult) {
+          qrResult.innerHTML = `<span class="error">${message}</span>`;
+        }
+        console.error(message);
+      }
 
       function onScanSuccess(decodedText) {
-        // Tu función actual...
+        console.log("Código escaneado:", decodedText);
+        qrResult.innerHTML = `Procesando: <strong>${decodedText}</strong>...`;
+        
+        fetch('/update_sheet', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ cedula: decodedText })
+        })
+        .then(response => {
+          if (!response.ok) throw new Error('Error en la red');
+          return response.json();
+        })
+        .then(data => {
+          if (data.success) {
+            qrResult.innerHTML = `<span class="success">✓ ${data.message}</span>`;
+            if (data.nombre) {
+              qrResult.innerHTML += `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>`;
+            }
+          } else {
+            qrResult.innerHTML = `<span class="error">✗ ${data.message}</span>`;
+          }
+        })
+        .catch(error => {
+          showError(`Error: ${error.message}`);
+        });
       }
 
       function startScanner() {
-        console.log('Intentando iniciar escáner...');
-        
-        // Usa el nombre completo de la clase
-        const html5QrCode = new window.Html5Qrcode("qr-reader");
-        
-        window.Html5Qrcode.getCameras()
+        // Verifica que la librería esté disponible
+        if (typeof Html5Qrcode === 'undefined') {
+          showError('Error: El escáner QR no está disponible. Recarga la página.');
+          return;
+        }
+
+        loader.classList.remove('hidden');
+        startBtn.disabled = true;
+
+        Html5Qrcode.getCameras()
           .then(devices => {
-            if (devices && devices.length) {
-              const cameraId = devices.find(d => d.label.includes("back"))?.id || devices[0].id;
-              
-              html5QrCode.start(
-                cameraId,
-                { 
-                  fps: 10,
-                  qrbox: { width: 250, height: 250 }
-                },
-                onScanSuccess,
-                (errorMessage) => {
-                  console.error('Error durante escaneo:', errorMessage);
-                }
-              ).then(() => {
-                startBtn.style.display = 'none';
-              }).catch(err => {
-                console.error('Error al iniciar:', err);
-                qrResult.innerHTML = `<span class="error">Error: ${err.message}</span>`;
-              });
-            } else {
-              qrResult.innerHTML = "<span class='error'>No se detectaron cámaras</span>";
+            if (!devices || devices.length === 0) {
+              throw new Error('No se encontraron cámaras');
             }
+            
+            const cameraId = devices.find(d => d.label.includes("back"))?.id || devices[0].id;
+            qrScanner = new Html5Qrcode("qr-reader");
+            
+            return qrScanner.start(
+              cameraId,
+              { 
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                rememberLastUsedCamera: true
+              },
+              onScanSuccess,
+              () => {} // No mostrar mensajes de error internos
+            );
+          })
+          .then(() => {
+            startBtn.classList.add('hidden');
           })
           .catch(err => {
-            console.error('Error al obtener cámaras:', err);
-            qrResult.innerHTML = `<span class="error">Error de cámara: ${err.message}</span>`;
+            showError(`Error: ${err.message}`);
+            startBtn.disabled = false;
+          })
+          .finally(() => {
+            loader.classList.add('hidden');
           });
       }
 
+      // Configura el botón
       startBtn.addEventListener('click', startScanner);
       
+      // Intenta iniciar automáticamente en móviles
       if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
         startScanner();
       }
-    }
+    });
   </script>
 </body>
 </html>
