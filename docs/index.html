@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Registro de Asistencia JIISBU 2025</title>
-  <!-- Carga desde múltiples fuentes con respaldo -->
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
+
   <style>
     :root {
       --primary: #2c3e50;
@@ -117,14 +117,16 @@
   <header>
     <img src="logo.jpeg" alt="Logo JIISBU 2025" class="logo">
     <h1>Registro de Asistencia</h1>
-    <p>Por favor escanee su código QR para registrar su participación</p>
+    <p>Por favor escanee su código QR o ingrese su cédula</p>
   </header>
 
   <div id="qr-container">
-    <div id="qr-reader"></div>
+    <button id="start-scanner" class="btn">📷 Iniciar Escáner QR</button>
+    <div id="qr-reader" style="display:none;"></div>
+
     <div id="fallback-ui">
       <p>Si el escáner no funciona, ingrese su número de cédula:</p>
-      <input type="text" id="cedula-input" placeholder="Ej: 1234567890" pattern="\d*" inputmode="numeric">
+      <input type="text" id="cedula-input" placeholder="Ej: 1234567890" pattern="\d*" inputmode="numeric" />
       <button id="manual-submit" class="btn">Registrar</button>
     </div>
   </div>
@@ -132,109 +134,91 @@
   <div id="qr-result"></div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
       const qrResult = document.getElementById('qr-result');
       const fallbackUI = document.getElementById('fallback-ui');
       const cedulaInput = document.getElementById('cedula-input');
       const manualSubmit = document.getElementById('manual-submit');
-      
-      // Mostrar mensajes al usuario
+      const startScannerBtn = document.getElementById('start-scanner');
+      const qrReaderContainer = document.getElementById('qr-reader');
+      let html5QrCode;
+
       function showMessage(message, isError = false) {
         qrResult.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
         qrResult.scrollIntoView({ behavior: 'smooth' });
       }
 
-      // Registrar asistencia
       function registerAttendance(cedula) {
         showMessage(`<span class="loading"></span> Procesando cédula: ${cedula}...`);
         manualSubmit.disabled = true;
 
         fetch('/update_sheet', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cedula: cedula.trim() })
         })
-        .then(async response => {
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.message || 'Error en el servidor');
-          }
-          return data;
-        })
-        .then(data => {
-          if (data.success) {
-            showMessage(`✓ ${data.message}${data.nombre ? `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>` : ''}`);
-          } else {
-            showMessage(`✗ ${data.message}`, true);
-          }
-        })
-        .catch(error => {
-          showMessage(`Error: ${error.message}`, true);
-          console.error('Error:', error);
-        })
-        .finally(() => {
-          manualSubmit.disabled = false;
-        });
+          .then(async response => {
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Error en el servidor');
+            return data;
+          })
+          .then(data => {
+            if (data.success) {
+              showMessage(`✓ ${data.message}${data.nombre ? `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>` : ''}`);
+            } else {
+              showMessage(`✗ ${data.message}`, true);
+            }
+          })
+          .catch(error => {
+            showMessage(`Error: ${error.message}`, true);
+            console.error('Error:', error);
+          })
+          .finally(() => {
+            manualSubmit.disabled = false;
+          });
       }
 
-      // Manejo del formulario manual
       manualSubmit.addEventListener('click', () => {
         const cedula = cedulaInput.value.trim();
-        if (!cedula) {
-          showMessage('Por favor ingrese un número de cédula', true);
-          return;
-        }
-        if (!/^\d+$/.test(cedula)) {
-          showMessage('La cédula debe contener solo números', true);
-          return;
-        }
+        if (!cedula) return showMessage('Por favor ingrese un número de cédula', true);
+        if (!/^\d+$/.test(cedula)) return showMessage('La cédula debe contener solo números', true);
         registerAttendance(cedula);
       });
 
-      // Configuración del escáner QR
       function initializeScanner() {
         if (!window.Html5Qrcode) {
           showMessage('El escáner QR no está disponible. Use el ingreso manual.', true);
-          fallbackUI.style.display = 'block';
           return;
         }
 
-        const html5QrCode = new Html5Qrcode("qr-reader");
-        const qrCodeSuccessCallback = (decodedText) => {
-          if (!/^\d+$/.test(decodedText)) {
-            showMessage('El código QR no contiene una cédula válida', true);
-            return;
-          }
-          registerAttendance(decodedText);
-        };
+        startScannerBtn.style.display = 'none';
+        qrReaderContainer.style.display = 'block';
 
-        const config = { 
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          rememberLastUsedCamera: true,
-          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-        };
+        html5QrCode = new Html5Qrcode("qr-reader");
 
         Html5Qrcode.getCameras()
           .then(devices => {
-            if (!devices || devices.length === 0) {
-              throw new Error('No se detectaron cámaras disponibles');
-            }
-            
-            // Preferir cámara trasera en móviles
-            const cameraId = devices.find(d => d.label.toLowerCase().includes("back"))?.id || 
-                            devices.find(d => d.label.toLowerCase().includes("rear"))?.id || 
-                            devices[0].id;
-            
+            if (!devices || devices.length === 0) throw new Error('No se detectaron cámaras disponibles');
+
+            const cameraId = devices.find(d => d.label.toLowerCase().includes("back"))?.id ||
+                             devices.find(d => d.label.toLowerCase().includes("rear"))?.id ||
+                             devices[0].id;
+
             return html5QrCode.start(
               cameraId,
-              config,
-              qrCodeSuccessCallback,
+              {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+              },
+              (decodedText) => {
+                if (/^\d+$/.test(decodedText)) {
+                  registerAttendance(decodedText);
+                } else {
+                  showMessage('El código QR no contiene una cédula válida', true);
+                }
+              },
               (errorMessage) => {
-                // No mostrar todos los errores al usuario
-                console.warn('Advertencia escáner:', errorMessage);
+                console.warn('QR Error:', errorMessage);
               }
             );
           })
@@ -243,19 +227,14 @@
           })
           .catch(error => {
             console.error('Error al iniciar escáner:', error);
-            showMessage(`Error: ${error.message}. Use el ingreso manual.`, true);
+            showMessage(`Error: ${error.message}. Puede usar el ingreso manual.`, true);
             fallbackUI.style.display = 'block';
+            startScannerBtn.style.display = 'block';
+            qrReaderContainer.style.display = 'none';
           });
       }
 
-      // Iniciar automáticamente en móviles
-      if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-        initializeScanner();
-      } else {
-        // En desktop, mostrar instrucciones
-        showMessage('Haga clic en "Iniciar Escáner" o ingrese la cédula manualmente');
-        fallbackUI.style.display = 'block';
-      }
+      startScannerBtn.addEventListener('click', initializeScanner);
     });
   </script>
 </body>

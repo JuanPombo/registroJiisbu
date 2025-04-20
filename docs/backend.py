@@ -16,6 +16,8 @@ COL_CEDULA = 4  # Columna D para cédula
 COL_ASISTENCIA = 8  # Columna H para asistencia
 COL_HORA = 9  # Columna I para hora de registro
 
+
+
 def get_credentials():
     """Obtiene las credenciales de Google Sheets con manejo de errores"""
     creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
