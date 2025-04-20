@@ -15,12 +15,11 @@
     }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      line-height: 1.6;
+      background-color: #f9f9f9;
       color: var(--dark);
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
-      background-color: #f9f9f9;
     }
     header {
       text-align: center;
@@ -28,21 +27,22 @@
     }
     h1 {
       color: var(--primary);
-      margin-bottom: 10px;
     }
-    #qr-container {
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      padding: 20px;
+    .logo {
+      max-width: 150px;
       margin-bottom: 20px;
     }
     #qr-reader {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    video {
       width: 100%;
-      min-height: 300px;
-      border: 2px dashed #ddd;
+      border: 2px dashed #ccc;
       border-radius: 8px;
-      margin: 0 auto;
     }
     #fallback-ui {
       display: none;
@@ -50,48 +50,41 @@
       text-align: center;
     }
     #cedula-input {
-      padding: 12px 15px;
+      padding: 10px;
       width: 70%;
       max-width: 300px;
-      border: 2px solid #ddd;
-      border-radius: 5px;
       font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
       margin-right: 10px;
     }
     .btn {
-      padding: 12px 25px;
+      padding: 10px 20px;
       background-color: var(--secondary);
       color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
       font-size: 16px;
-      transition: all 0.3s ease;
-    }
-    .btn:hover {
-      background-color: #2980b9;
-      transform: translateY(-2px);
     }
     .btn:disabled {
-      background-color: #95a5a6;
-      cursor: not-allowed;
-    }
-    #qr-result {
-      padding: 15px;
-      border-radius: 5px;
-      margin-top: 20px;
-      text-align: center;
-      min-height: 60px;
+      background-color: #aaa;
     }
     .success {
       color: var(--success);
-      background-color: rgba(46, 204, 113, 0.1);
+      background-color: #e8f8f2;
       border: 1px solid var(--success);
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
     }
     .error {
       color: var(--danger);
-      background-color: rgba(231, 76, 60, 0.1);
+      background-color: #fdecea;
       border: 1px solid var(--danger);
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
     }
     .loading {
       display: inline-block;
@@ -105,10 +98,6 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
-    .logo {
-      max-width: 150px;
-      margin-bottom: 20px;
-    }
   </style>
 </head>
 <body>
@@ -118,121 +107,107 @@
     <p>Por favor escanee su código QR para registrar su participación</p>
   </header>
 
-  <div id="qr-container">
-    <div id="qr-reader"></div>
-    <div id="fallback-ui">
-      <p>Si el escáner no funciona, ingrese su número de cédula:</p>
-      <input type="text" id="cedula-input" placeholder="Ej: 1234567890" pattern="\d*" inputmode="numeric">
-      <button id="manual-submit" class="btn">Registrar</button>
-    </div>
+  <div id="qr-reader">
+    <video muted playsinline></video>
+  </div>
+
+  <div id="fallback-ui">
+    <p>Si el escáner no funciona, ingrese su número de cédula:</p>
+    <input type="text" id="cedula-input" placeholder="Ej: 1234567890">
+    <button id="manual-submit" class="btn">Registrar</button>
   </div>
 
   <div id="qr-result"></div>
 
-  <!-- QR Scanner script -->
-  <script src="./qr-scanner.umd.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const qrResult = document.getElementById('qr-result');
-      const fallbackUI = document.getElementById('fallback-ui');
-      const cedulaInput = document.getElementById('cedula-input');
-      const manualSubmit = document.getElementById('manual-submit');
+    const video = document.querySelector("#qr-reader video");
+    const resultEl = document.getElementById("qr-result");
+    const fallbackUI = document.getElementById("fallback-ui");
+    const cedulaInput = document.getElementById("cedula-input");
+    const manualSubmit = document.getElementById("manual-submit");
 
-      // Mostrar mensajes
-      function showMessage(message, isError = false) {
-        qrResult.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
-        qrResult.scrollIntoView({ behavior: 'smooth' });
-      }
+    let lastScanned = '';
+    let lastScanTime = 0;
 
-      // Registrar asistencia
-      function registerAttendance(cedula) {
-        showMessage(`<span class="loading"></span> Procesando cédula: ${cedula}...`);
-        manualSubmit.disabled = true;
+    function showMessage(message, isError = false) {
+      resultEl.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
+      resultEl.scrollIntoView({ behavior: "smooth" });
+    }
 
-        fetch('/update_sheet', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ cedula: cedula.trim() })
-        })
-        .then(async response => {
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.message || 'Error en el servidor');
-          return data;
-        })
-        .then(data => {
-          if (data.success) {
-            showMessage(`✓ ${data.message}${data.nombre ? `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>` : ''}`);
-          } else {
-            showMessage(`✗ ${data.message}`, true);
-          }
-        })
-        .catch(error => {
-          showMessage(`Error: ${error.message}`, true);
-          console.error('Error:', error);
-        })
-        .finally(() => {
-          manualSubmit.disabled = false;
-        });
-      }
-
-      // Registro manual
-      manualSubmit.addEventListener('click', () => {
-        const cedula = cedulaInput.value.trim();
-        if (!cedula) {
-          showMessage('Por favor ingrese un número de cédula', true);
-          return;
+    function registerAttendance(cedula) {
+      showMessage(`<span class="loading"></span> Procesando cédula: ${cedula}...`);
+      manualSubmit.disabled = true;
+      fetch('/update_sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cedula: cedula.trim() })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          showMessage(`✓ ${data.message}${data.nombre ? `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>` : ''}`);
+        } else {
+          showMessage(`✗ ${data.message}`, true);
         }
-        if (!/^\d+$/.test(cedula)) {
-          showMessage('La cédula debe contener solo números', true);
-          return;
-        }
-        registerAttendance(cedula);
+      })
+      .catch(err => {
+        showMessage(`Error: ${err.message}`, true);
+      })
+      .finally(() => {
+        manualSubmit.disabled = false;
       });
+    }
 
-      // Iniciar escáner
-      function initializeScanner() {
-        if (typeof QrScanner === 'undefined') {
-          showMessage('El escáner QR no está disponible. Use el ingreso manual.', true);
-          fallbackUI.style.display = 'block';
-          return;
-        }
-
-        const videoElem = document.getElementById('qr-reader');
-        let lastScanned = '';
-        let lastScanTime = 0;
-
-        const qrScanner = new QrScanner(videoElem, (decodedText) => {
-          const now = Date.now();
-          if (decodedText === lastScanned && now - lastScanTime < 5000) {
-            return; // Ignora si es duplicado reciente
-          }
-
-          lastScanned = decodedText;
-          lastScanTime = now;
-
-          if (!/^\d+$/.test(decodedText)) {
-            showMessage('El código QR no contiene una cédula válida', true);
-            return;
-          }
-
-          registerAttendance(decodedText);
-        }, {
-          highlightScanRegion: true,
-          returnDetailedScanResult: true
-        });
-
-        qrScanner.start().catch((error) => {
-          console.error('Error al iniciar el escáner:', error);
-          showMessage(`Error al iniciar el escáner: ${error.message}. Use el ingreso manual.`, true);
-          fallbackUI.style.display = 'block';
-        });
+    manualSubmit.addEventListener('click', () => {
+      const cedula = cedulaInput.value.trim();
+      if (!cedula || !/^\d+$/.test(cedula)) {
+        showMessage('Por favor ingrese un número de cédula válido', true);
+        return;
       }
-
-      initializeScanner();
+      registerAttendance(cedula);
     });
+
+    async function startScanner() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        await video.play();
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        const scan = () => {
+          if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, canvas.width, canvas.height);
+            if (code) {
+              const now = Date.now();
+              if (code.data !== lastScanned || now - lastScanTime > 5000) {
+                lastScanned = code.data;
+                lastScanTime = now;
+                if (/^\d+$/.test(code.data)) {
+                  registerAttendance(code.data);
+                } else {
+                  showMessage("El código QR no contiene una cédula válida", true);
+                }
+              }
+            }
+          }
+          requestAnimationFrame(scan);
+        };
+        scan();
+      } catch (error) {
+        showMessage("No se pudo acceder a la cámara. Use el ingreso manual.", true);
+        fallbackUI.style.display = "block";
+        console.error("Error al iniciar la cámara:", error);
+      }
+    }
+
+    startScanner();
   </script>
 </body>
 </html>
