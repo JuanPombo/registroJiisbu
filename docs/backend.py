@@ -1,14 +1,23 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
+import os
 
 app = Flask(__name__)
 CORS(app)  # Habilita CORS para permitir solicitudes desde el frontend
 
 # Autenticación con Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("registro-jiisbu-d23e447232b1.json", scope)
+
+# Obtener las credenciales desde la variable de entorno
+credenciales_json = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+
+if credenciales_json:
+    creds = Credentials.from_service_account_info(eval(credenciales_json), scopes=scope)
+else:
+    raise Exception("No se encontraron las credenciales en la variable de entorno.")
+
 client = gspread.authorize(creds)
 sheet = client.open("ASISTENCIA - JIISBU 2025").worksheet("ASISTENTES")
 
