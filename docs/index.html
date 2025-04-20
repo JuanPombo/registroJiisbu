@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Escanear QR</title>
   <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
   <style>
@@ -16,24 +16,28 @@
       max-width: 500px;
       margin: 20px auto;
     }
+    #status {
+      margin-top: 20px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <h1>Escanea tu código QR</h1>
   <div id="reader"></div>
-  <p id="status"></p>
+  <p id="status">Esperando escaneo...</p>
 
   <script>
-    // Inicia el escáner de QR
     const html5QrCode = new Html5Qrcode("reader");
+    let scanned = false;
 
-    // Función para procesar el QR escaneado
-    function onScanSuccess(decodedText, decodedResult) {
-      // Aquí puedes mandar el código decodificado (cédula) al servidor
+    function onScanSuccess(decodedText) {
+      if (scanned) return; // evitar múltiples lecturas
+      scanned = true;
+
       document.getElementById("status").innerText = `Cédula escaneada: ${decodedText}`;
 
-      // Realiza una llamada a tu servidor para actualizar el Google Sheet
-      fetch('https://tu-servidor.com/update_sheet', {
+      fetch('http://localhost:5000/update_sheet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -42,27 +46,19 @@
       })
       .then(response => response.json())
       .then(data => {
-        if (data.success) {
-          document.getElementById("status").innerText = "Asistencia registrada con éxito.";
-        } else {
-          document.getElementById("status").innerText = "Error al registrar asistencia.";
-        }
+        document.getElementById("status").innerText = data.message;
       })
-      .catch(err => {
-        document.getElementById("status").innerText = "Error de conexión.";
+      .catch(() => {
+        document.getElementById("status").innerText = "Error de conexión con el servidor.";
       });
     }
 
-    // Iniciar el escaneo
     html5QrCode.start(
-      { facingMode: "environment" }, // Cámara trasera
-      {
-        fps: 10, // Fotogramas por segundo
-        qrbox: 250 // Tamaño del área para escanear
-      },
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
       onScanSuccess
     ).catch(err => {
-      document.getElementById("status").innerText = "Error al iniciar la cámara.";
+      document.getElementById("status").innerText = "Error al iniciar la cámara: " + err;
     });
   </script>
 </body>

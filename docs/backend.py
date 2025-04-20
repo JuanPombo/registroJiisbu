@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os
 
 app = Flask(__name__)
+CORS(app)  # Habilita CORS para permitir solicitudes desde el frontend
 
 # Autenticación con Google Sheets
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -13,27 +14,25 @@ sheet = client.open("ASISTENCIA - JIISBU 2025").worksheet("ASISTENTES")
 
 @app.route('/update_sheet', methods=['POST'])
 def update_sheet():
-    # Recibe la cédula del QR
     data = request.get_json()
-    cedula = data.get("cedula")
-    
+    cedula = data.get("cedula", "").strip()
+
     if not cedula:
         return jsonify({"success": False, "message": "Cédula no proporcionada."}), 400
 
-    # Buscar la fila con la cédula en la columna D
-    celdas = sheet.col_values(4)
-    fila_encontrada = None
-    for idx, valor in enumerate(celdas, start=1):
-        if valor.strip() == cedula:
-            fila_encontrada = idx
-            break
+    try:
+        # Buscar la fila con la cédula en la columna D (4)
+        celdas = sheet.col_values(4)
+        for idx, valor in enumerate(celdas, start=1):
+            if valor.strip() == cedula:
+                # Marcar asistencia en la columna H (8)
+                sheet.update_cell(idx, 8, "✓")
+                return jsonify({"success": True, "message": "Asistencia registrada."})
 
-    if fila_encontrada:
-        # Marcar asistencia en la columna correspondiente (por ejemplo, columna 8)
-        sheet.update_cell(fila_encontrada, 8, "✓")
-        return jsonify({"success": True, "message": "Asistencia registrada."})
-    else:
         return jsonify({"success": False, "message": "Cédula no encontrada."}), 404
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Error del servidor: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port=5000)
