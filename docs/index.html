@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Registro de Asistencia JIISBU 2025</title>
+  <!-- Carga de QR Scanner desde GitHub (sin CDN) -->
+  <script type="module" src="https://raw.githubusercontent.com/nayuki/QR-Code-generator/master/js/qr-scanner/qr-scanner.umd.min.js"></script>
   <style>
     :root {
       --primary: #2c3e50;
@@ -129,9 +131,6 @@
 
   <div id="qr-result"></div>
 
-  <!-- Cargar el archivo QR scanner -->
-  <script src="./qr-scanner.umd.min.js"></script>
-  
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const qrResult = document.getElementById('qr-result');
@@ -210,14 +209,21 @@
           registerAttendance(decodedText);
         });
 
+        // Intentamos iniciar el escáner y capturar cualquier error
         qrScanner.start().catch((error) => {
           console.error('Error al iniciar el escáner:', error);
-          showMessage(`Error al iniciar el escáner: ${error.message}. Use el ingreso manual.`, true);
+
+          if (error.message.includes('play is not a function')) {
+            showMessage('Parece que tu cámara no está funcionando. Usa el ingreso manual.', true);
+          } else {
+            showMessage(`Error al iniciar el escáner: ${error.message}. Usa el ingreso manual.`, true);
+          }
+
           fallbackUI.style.display = 'block';
         });
       }
 
-      // Iniciar escáner QR
+      // Inicializar el escáner cuando la página cargue
       initializeScanner();
     });
   </script>
