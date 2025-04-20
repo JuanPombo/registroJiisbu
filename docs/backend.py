@@ -4,7 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 
 app = Flask(__name__, static_folder='.')
@@ -14,19 +14,15 @@ CORS(app)
 SHEET_NAME = "ASISTENCIA - JIISBU 2025"
 WORKSHEET_NAME = "ASISTENTES"
 COL_CEDULA = 4  # Columna D para cédula
-HEADER_ROW = 10
-
-# Columnas por día
-DIAS_EVENTO = {
-    28: {"asistencia": 8, "hora": 11},  # H y K
-    29: {"asistencia": 9, "hora": 12},  # I y L
-    30: {"asistencia": 10, "hora": 13}, # J y M
-}
+COL_ASISTENCIA = 8  # Columna H para asistencia
+COL_HORA = 9  # Columna I para hora de registro
 
 def get_credentials():
+    """Obtiene las credenciales de Google Sheets con manejo de errores"""
     creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
     if not creds_json:
         raise ValueError("No se configuraron las credenciales en variables de entorno")
+    
     try:
         return Credentials.from_service_account_info(json.loads(creds_json), scopes=[
             "https://www.googleapis.com/auth/spreadsheets",
@@ -36,6 +32,7 @@ def get_credentials():
         raise ValueError(f"Error en credenciales: {str(e)}")
 
 def get_sheet():
+    """Obtiene la hoja de cálculo con reconexión automática"""
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -46,12 +43,7 @@ def get_sheet():
             if attempt == max_retries - 1:
                 app.logger.error(f"Error al conectar con Google Sheets: {str(e)}")
                 return None
-            time.sleep(2 ** attempt)
-
-def hora_colombiana():
-    utc_now = datetime.utcnow()
-    colombia_now = utc_now - timedelta(hours=5)
-    return colombia_now
+            time.sleep(2 ** attempt)  # Espera exponencial
 
 @app.route('/update_sheet', methods=['POST'])
 def update_sheet():
@@ -77,43 +69,27 @@ def update_sheet():
                 "message": "La cédula debe contener solo números"
             }), 400
 
-        # Buscar la cédula a partir de la fila 11
+        # Buscar la cédula exacta en la columna D
         try:
             cell = sheet.find(cedula, in_column=COL_CEDULA)
-            if cell.row < HEADER_ROW + 1:
-                raise gspread.exceptions.CellNotFound()
         except gspread.exceptions.CellNotFound:
             return jsonify({
                 "success": False,
                 "message": "Cédula no encontrada en el sistema"
             }), 404
 
-        # Fecha actual en hora colombiana
-        ahora = hora_colombiana()
-        dia_actual = 28 #-----------------------------------------recuerde configurar el dia -----ahora.day
-
-        if dia_actual not in DIAS_EVENTO:
-            return jsonify({
-                "success": False,
-                "message": f"Hoy ({dia_actual}) no es un día de registro válido."
-            }), 400
-
-        col_asistencia = DIAS_EVENTO[dia_actual]["asistencia"]
-        col_hora = DIAS_EVENTO[dia_actual]["hora"]
-
         # Verificar si ya está registrada
-        if sheet.cell(cell.row, col_asistencia).value == "✓":
+        if sheet.cell(cell.row, COL_ASISTENCIA).value == "✓":
             return jsonify({
                 "success": False,
-                "message": "Esta cédula ya fue registrada hoy"
+                "message": "Esta cédula ya fue registrada"
             }), 400
 
-        # Registrar ✔ y hora
-        hora = ahora.strftime("%I:%M %p")  # Ej: 08:20 AM
-        sheet.update_cell(cell.row, col_asistencia, "✓")
-        sheet.update_cell(cell.row, col_hora, hora)
-
-        # Obtener nombre del asistente
+        # Registrar asistencia
+        sheet.update_cell(cell.row, COL_ASISTENCIA, "✓")
+        sheet.update_cell(cell.row, COL_HORA, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        
+        # Obtener nombre del asistente (asumiendo columna B)
         nombre = sheet.cell(cell.row, 2).value
 
         return jsonify({
