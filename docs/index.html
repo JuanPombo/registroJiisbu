@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Registro de Asistencia JIISBU 2025</title>
-  <!-- Carga de QR Scanner desde GitHub (sin CDN) -->
-  <script type="module" src="https://raw.githubusercontent.com/nayuki/QR-Code-generator/master/js/qr-scanner/qr-scanner.umd.min.js"></script>
   <style>
     :root {
       --primary: #2c3e50;
@@ -131,13 +129,19 @@
 
   <div id="qr-result"></div>
 
+  <!-- Cargar la librería jsQR -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const qrResult = document.getElementById('qr-result');
       const fallbackUI = document.getElementById('fallback-ui');
       const cedulaInput = document.getElementById('cedula-input');
       const manualSubmit = document.getElementById('manual-submit');
-      
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+
       // Mostrar mensajes al usuario
       function showMessage(message, isError = false) {
         qrResult.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
@@ -193,37 +197,50 @@
         registerAttendance(cedula);
       });
 
-      // Configuración del escáner QR
+      // Configuración del escáner QR usando jsQR
       function initializeScanner() {
-        if (typeof QrScanner === 'undefined') {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           showMessage('El escáner QR no está disponible. Use el ingreso manual.', true);
           fallbackUI.style.display = 'block';
           return;
         }
 
-        const qrScanner = new QrScanner(document.getElementById('qr-reader'), (decodedText) => {
-          if (!/^\d+$/.test(decodedText)) {
-            showMessage('El código QR no contiene una cédula válida', true);
-            return;
-          }
-          registerAttendance(decodedText);
-        });
-
-        // Intentamos iniciar el escáner y capturar cualquier error
-        qrScanner.start().catch((error) => {
-          console.error('Error al iniciar el escáner:', error);
-
-          if (error.message.includes('play is not a function')) {
-            showMessage('Parece que tu cámara no está funcionando. Usa el ingreso manual.', true);
-          } else {
-            showMessage(`Error al iniciar el escáner: ${error.message}. Usa el ingreso manual.`, true);
-          }
-
-          fallbackUI.style.display = 'block';
-        });
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          .then(stream => {
+            video.srcObject = stream;
+            video.setAttribute('playsinline', true); // Necesario para iPhone
+            video.play();
+            requestAnimationFrame(scanQRCode);
+          })
+          .catch(error => {
+            console.error('Error al acceder a la cámara:', error);
+            showMessage('No se pudo acceder a la cámara. Use el ingreso manual.', true);
+            fallbackUI.style.display = 'block';
+          });
       }
 
-      // Inicializar el escáner cuando la página cargue
+      // Escanear el QR con jsQR
+      function scanQRCode() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.height = video.videoHeight;
+          canvas.width = video.videoWidth;
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, canvas.width, canvas.height);
+          
+          if (code) {
+            const decodedText = code.data;
+            if (!/^\d+$/.test(decodedText)) {
+              showMessage('El código QR no contiene una cédula válida', true);
+              return;
+            }
+            registerAttendance(decodedText);
+          }
+        }
+        requestAnimationFrame(scanQRCode);
+      }
+
+      // Iniciar el escáner
       initializeScanner();
     });
   </script>
