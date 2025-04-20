@@ -37,13 +37,14 @@
 
       document.getElementById("status").innerText = `Cédula escaneada: ${decodedText}`;
 
-      fetch('http://localhost:5000/update_sheet', {
+      fetch('https://registrojiisbu.onrender.com/update_sheet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ cedula: decodedText })
       })
+      
       .then(response => response.json())
       .then(data => {
         document.getElementById("status").innerText = data.message;
