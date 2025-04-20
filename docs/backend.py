@@ -17,12 +17,13 @@ def get_credentials():
     if not creds_json:
         raise ValueError("No se encontraron las credenciales en las variables de entorno")
     try:
-        return Credentials.from_service_account_info(json.loads(creds_json), scopes=scope)
+        creds_info = json.loads(creds_json)
+        return Credentials.from_service_account_info(creds_info, scopes=scope)
     except Exception as e:
         raise ValueError(f"Error cargando credenciales: {str(e)}")
 
 try:
-    creds, _ = get_credentials()
+    creds = get_credentials()  # <-- Cambio importante aquí (eliminé el unpacking)
     client = gspread.authorize(creds)
     sheet = client.open("ASISTENCIA - JIISBU 2025").worksheet("ASISTENTES")
 except Exception as e:

@@ -15,20 +15,31 @@
     }
     #qr-reader {
       width: 100%;
+      max-width: 500px;
       margin: 20px auto;
+      border: 2px solid #ddd;
+      border-radius: 8px;
     }
     #qr-result {
       margin-top: 20px;
-      padding: 10px;
-      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 5px;
+      background: #f8f9fa;
     }
-    button {
+    .btn {
       padding: 10px 20px;
       background: #007bff;
       color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
+      margin: 10px;
+    }
+    .error {
+      color: #dc3545;
+    }
+    .success {
+      color: #28a745;
     }
   </style>
 </head>
@@ -36,15 +47,17 @@
   <h1>Registro de Asistencia</h1>
   <p>Escanea tu código QR para registrar tu asistencia</p>
   
-  <div id="qr-reader" style="width: 500px"></div>
+  <div id="qr-reader"></div>
   <div id="qr-result"></div>
+  <button id="start-btn" class="btn">Iniciar Escáner</button>
   
   <script>
     const qrResult = document.getElementById('qr-result');
-    const qrReader = new Html5Qrcode("qr-reader");
+    const startBtn = document.getElementById('start-btn');
+    let qrScanner;
     
     function onScanSuccess(decodedText) {
-      qrResult.innerHTML = `Registrando: ${decodedText}...`;
+      qrResult.innerHTML = `Procesando: <strong>${decodedText}</strong>...`;
       
       fetch('/update_sheet', {
         method: 'POST',
@@ -53,36 +66,57 @@
         },
         body: JSON.stringify({ cedula: decodedText })
       })
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) throw new Error('Error en la red');
+        return response.json();
+      })
       .then(data => {
-        qrResult.innerHTML = data.message;
-        qrReader.stop().catch(() => {});
-        setTimeout(() => {
-          qrResult.innerHTML = '';
-          qrReader.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            onScanSuccess
-          ).catch(console.error);
-        }, 2000);
+        if (data.success) {
+          qrResult.innerHTML = `<span class="success">✓ ${data.message}</span>`;
+          if (data.nombre) {
+            qrResult.innerHTML += `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>`;
+          }
+        } else {
+          qrResult.innerHTML = `<span class="error">✗ ${data.message}</span>`;
+        }
       })
       .catch(error => {
-        qrResult.innerHTML = `Error: ${error.message}`;
+        qrResult.innerHTML = `<span class="error">Error: ${error.message}</span>`;
       });
     }
 
     function startScanner() {
-      qrReader.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        onScanSuccess
-      ).catch(error => {
-        qrResult.innerHTML = `Error al iniciar cámara: ${error}`;
-      });
+      Html5Qrcode.getCameras()
+        .then(devices => {
+          if (devices && devices.length) {
+            const cameraId = devices[0].id; // Usa la cámara trasera si está disponible
+            
+            qrScanner = new Html5Qrcode("qr-reader");
+            qrScanner.start(
+              cameraId,
+              { fps: 10, qrbox: 250 },
+              onScanSuccess,
+              () => {} // No mostrar mensaje de error
+            ).then(() => {
+              startBtn.style.display = 'none';
+            }).catch(err => {
+              qrResult.innerHTML = `<span class="error">Error al iniciar cámara: ${err}</span>`;
+            });
+          } else {
+            qrResult.innerHTML = "<span class='error'>No se encontraron cámaras</span>";
+          }
+        })
+        .catch(err => {
+          qrResult.innerHTML = `<span class="error">Error al acceder a la cámara: ${err}</span>`;
+        });
     }
 
-    // Iniciar automáticamente al cargar la página
-    window.addEventListener('DOMContentLoaded', startScanner);
+    startBtn.addEventListener('click', startScanner);
+    
+    // Intenta iniciar automáticamente en dispositivos móviles
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      startScanner();
+    }
   </script>
 </body>
 </html>
