@@ -114,7 +114,7 @@ def update_sheet():
         sheet.update_cell(cell.row, col_hora, hora)
 
         # Obtener nombre del asistente
-        nombre = sheet.cell(cell.row, 2).value
+        nombre = sheet.cell(cell.row, 3).value
 
         return jsonify({
             "success": True,
