@@ -15,43 +15,68 @@ scope = ["https://www.googleapis.com/auth/spreadsheets",
 def get_credentials():
     creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
     if not creds_json:
-        raise ValueError("No se encontraron las credenciales en las variables de entorno")
+        raise ValueError("No se encontraron las credenciales")
     try:
-        creds_info = json.loads(creds_json)
-        return Credentials.from_service_account_info(creds_info, scopes=scope)
+        return Credentials.from_service_account_info(json.loads(creds_json), scopes=scope)
     except Exception as e:
-        raise ValueError(f"Error cargando credenciales: {str(e)}")
+        raise ValueError(f"Error credenciales: {str(e)}")
 
 try:
-    creds = get_credentials()  # <-- Cambio importante aquí (eliminé el unpacking)
+    creds = get_credentials()
     client = gspread.authorize(creds)
     sheet = client.open("ASISTENCIA - JIISBU 2025").worksheet("ASISTENTES")
+    print("✅ Conexión con Google Sheets establecida")
 except Exception as e:
-    print(f"Error inicializando Google Sheets: {str(e)}")
+    print(f"❌ Error Google Sheets: {str(e)}")
     sheet = None
 
-# Servir el frontend
 @app.route('/')
 def serve_index():
     return send_from_directory('.', 'index.html')
 
-# Servir archivos estáticos
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('.', path)
 
-# API para registrar asistencia
 @app.route('/update_sheet', methods=['POST'])
 def update_sheet():
     if not sheet:
-        return jsonify({"success": False, "message": "Error de conexión con Google Sheets"}), 500
+        return jsonify({"success": False, "message": "Error con Google Sheets"}), 500
     
-    data = request.get_json()
-    if not data or 'cedula' not in data:
-        return jsonify({"success": False, "message": "Datos inválidos"}), 400
+    try:
+        data = request.get_json()
+        if not data or 'cedula' not in data:
+            return jsonify({"success": False, "message": "Datos inválidos"}), 400
+        
+        cedula = str(data['cedula']).strip()
+        print(f"Buscando cédula: {cedula}")
+        
+        # Obtener todos los registros
+        records = sheet.get_all_records()
+        
+        for idx, row in enumerate(records, start=2):  # Fila 2 es el primer dato
+            if str(row.get('CEDULA', '')).strip() == cedula:
+                # Verificar si ya está registrado
+                if row.get('ASISTENCIA', '') == "✓":
+                    return jsonify({
+                        "success": False,
+                        "message": "Esta cédula ya fue registrada"
+                    }), 400
+                
+                # Actualizar hoja
+                sheet.update_cell(idx, 8, "✓")  # Columna H (8) es ASISTENCIA
+                print(f"✅ Registrada cédula: {cedula}")
+                return jsonify({
+                    "success": True,
+                    "message": "Asistencia registrada exitosamente",
+                    "nombre": row.get('NOMBRE', '')
+                })
+        
+        return jsonify({"success": False, "message": "Cédula no encontrada"}), 404
     
-    cedula = str(data['cedula']).strip()
-    # ... (resto del código de update_sheet)
+    except Exception as e:
+        print(f"❌ Error en update_sheet: {str(e)}")
+        return jsonify({"success": False, "message": f"Error del servidor: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

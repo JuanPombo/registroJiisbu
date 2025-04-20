@@ -6,57 +6,29 @@
   <title>Registro de Asistencia</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      text-align: center;
-    }
+    /* Estilos anteriores... */
     #qr-reader {
       width: 100%;
       max-width: 500px;
       margin: 20px auto;
       border: 2px solid #ddd;
       border-radius: 8px;
+      min-height: 300px; /* Espacio reservado para la cámara */
     }
-    #qr-result {
-      margin-top: 20px;
-      padding: 15px;
-      border-radius: 5px;
-      background: #f8f9fa;
-    }
-    .btn {
-      padding: 10px 20px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      margin: 10px;
-    }
-    .error {
-      color: #dc3545;
-    }
-    .success {
-      color: #28a745;
+    #qr-reader__dashboard_section {
+      text-align: center;
     }
   </style>
 </head>
 <body>
-  <h1>Registro de Asistencia</h1>
-  <p>Escanea tu código QR para registrar tu asistencia</p>
-  
-  <div id="qr-reader"></div>
-  <div id="qr-result"></div>
-  <button id="start-btn" class="btn">Iniciar Escáner</button>
+  <!-- Contenido anterior... -->
   
   <script>
     const qrResult = document.getElementById('qr-result');
     const startBtn = document.getElementById('start-btn');
-    let qrScanner;
     
     function onScanSuccess(decodedText) {
+      console.log("Código escaneado:", decodedText);
       qrResult.innerHTML = `Procesando: <strong>${decodedText}</strong>...`;
       
       fetch('/update_sheet', {
@@ -66,16 +38,13 @@
         },
         body: JSON.stringify({ cedula: decodedText })
       })
-      .then(response => {
-        if (!response.ok) throw new Error('Error en la red');
-        return response.json();
-      })
+      .then(response => response.json())
       .then(data => {
         if (data.success) {
           qrResult.innerHTML = `<span class="success">✓ ${data.message}</span>`;
-          if (data.nombre) {
-            qrResult.innerHTML += `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>`;
-          }
+          setTimeout(() => {
+            window.location.reload(); // Recargar para nuevo escaneo
+          }, 2000);
         } else {
           qrResult.innerHTML = `<span class="error">✗ ${data.message}</span>`;
         }
@@ -86,37 +55,52 @@
     }
 
     function startScanner() {
+      // Configuración mejorada del escáner
+      const config = { 
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        rememberLastUsedCamera: true
+      };
+      
       Html5Qrcode.getCameras()
         .then(devices => {
           if (devices && devices.length) {
-            const cameraId = devices[0].id; // Usa la cámara trasera si está disponible
+            // Preferir cámara trasera en móviles
+            const cameraId = devices.find(d => d.label.includes("back"))?.id || devices[0].id;
             
-            qrScanner = new Html5Qrcode("qr-reader");
-            qrScanner.start(
+            const html5QrCode = new Html5Qrcode("qr-reader");
+            html5QrCode.start(
               cameraId,
-              { fps: 10, qrbox: 250 },
+              config,
               onScanSuccess,
-              () => {} // No mostrar mensaje de error
+              () => {} // No mostrar mensajes de error
             ).then(() => {
               startBtn.style.display = 'none';
             }).catch(err => {
-              qrResult.innerHTML = `<span class="error">Error al iniciar cámara: ${err}</span>`;
+              qrResult.innerHTML = `<span class="error">Error: ${err}</span>`;
+              console.error("Error cámara:", err);
             });
           } else {
-            qrResult.innerHTML = "<span class='error'>No se encontraron cámaras</span>";
+            qrResult.innerHTML = "<span class='error'>No se detectaron cámaras</span>";
           }
         })
         .catch(err => {
           qrResult.innerHTML = `<span class="error">Error al acceder a la cámara: ${err}</span>`;
+          console.error("Error dispositivos:", err);
         });
     }
 
-    startBtn.addEventListener('click', startScanner);
-    
-    // Intenta iniciar automáticamente en dispositivos móviles
+    // Iniciar automáticamente en móviles
     if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
       startScanner();
+    } else {
+      // Mostrar botón en desktop
+      startBtn.style.display = 'block';
+      startBtn.addEventListener('click', startScanner);
     }
+
+    // Debug: Verificar si la librería se cargó
+    console.log("Html5Qrcode disponible:", typeof Html5Qrcode !== 'undefined');
   </script>
 </body>
 </html>
