@@ -3,89 +3,152 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registro de Asistencia</title>
-  <!-- Cargamos la librería desde múltiples fuentes con respaldo -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
+  <title>Registro de Asistencia JIISBU 2025</title>
+  <!-- Carga desde múltiples fuentes con respaldo -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
   <style>
+    :root {
+      --primary: #2c3e50;
+      --secondary: #3498db;
+      --success: #2ecc71;
+      --danger: #e74c3c;
+      --light: #ecf0f1;
+      --dark: #34495e;
+    }
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: var(--dark);
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
+      background-color: #f9f9f9;
+    }
+    header {
       text-align: center;
+      margin-bottom: 30px;
+    }
+    h1 {
+      color: var(--primary);
+      margin-bottom: 10px;
     }
     #qr-container {
-      margin: 20px auto;
-      max-width: 500px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
     }
     #qr-reader {
       width: 100%;
       min-height: 300px;
-      border: 2px dashed #ccc;
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      margin: 0 auto;
     }
-    #manual-input {
-      margin-top: 20px;
+    #fallback-ui {
       display: none;
+      margin-top: 20px;
+      text-align: center;
     }
     #cedula-input {
-      padding: 10px;
-      width: 200px;
+      padding: 12px 15px;
+      width: 70%;
+      max-width: 300px;
+      border: 2px solid #ddd;
+      border-radius: 5px;
+      font-size: 16px;
+      margin-right: 10px;
     }
     .btn {
-      padding: 10px 20px;
-      background: #007bff;
+      padding: 12px 25px;
+      background-color: var(--secondary);
       color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
-      margin: 10px;
+      font-size: 16px;
+      transition: all 0.3s ease;
     }
-    .error {
-      color: #dc3545;
+    .btn:hover {
+      background-color: #2980b9;
+      transform: translateY(-2px);
     }
-    .success {
-      color: #28a745;
+    .btn:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
     }
     #qr-result {
-      margin-top: 20px;
       padding: 15px;
-      min-height: 50px;
+      border-radius: 5px;
+      margin-top: 20px;
+      text-align: center;
+      min-height: 60px;
+    }
+    .success {
+      color: var(--success);
+      background-color: rgba(46, 204, 113, 0.1);
+      border: 1px solid var(--success);
+    }
+    .error {
+      color: var(--danger);
+      background-color: rgba(231, 76, 60, 0.1);
+      border: 1px solid var(--danger);
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .logo {
+      max-width: 150px;
+      margin-bottom: 20px;
     }
   </style>
 </head>
 <body>
-  <h1>Registro de Asistencia</h1>
-  <p>Escanea tu código QR para registrar tu asistencia</p>
-  
+  <header>
+    <img src="logo.jpeg" alt="Logo JIISBU 2025" class="logo">
+    <h1>Registro de Asistencia</h1>
+    <p>Por favor escanee su código QR para registrar su participación</p>
+  </header>
+
   <div id="qr-container">
     <div id="qr-reader"></div>
-    <div id="manual-input">
-      <p>Si el escáner no funciona, ingresa tu cédula manualmente:</p>
-      <input type="text" id="cedula-input" placeholder="Número de cédula">
-      <button id="submit-btn" class="btn">Registrar</button>
+    <div id="fallback-ui">
+      <p>Si el escáner no funciona, ingrese su número de cédula:</p>
+      <input type="text" id="cedula-input" placeholder="Ej: 1234567890" pattern="\d*" inputmode="numeric">
+      <button id="manual-submit" class="btn">Registrar</button>
     </div>
   </div>
-  
+
   <div id="qr-result"></div>
-  <button id="start-btn" class="btn">Iniciar Escáner</button>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const qrResult = document.getElementById('qr-result');
-      const startBtn = document.getElementById('start-btn');
-      const manualInput = document.getElementById('manual-input');
+      const fallbackUI = document.getElementById('fallback-ui');
       const cedulaInput = document.getElementById('cedula-input');
-      const submitBtn = document.getElementById('submit-btn');
+      const manualSubmit = document.getElementById('manual-submit');
       
-      // Mostrar mensaje seguro
+      // Mostrar mensajes al usuario
       function showMessage(message, isError = false) {
-        qrResult.innerHTML = `<span class="${isError ? 'error' : 'success'}">${message}</span>`;
+        qrResult.innerHTML = `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
+        qrResult.scrollIntoView({ behavior: 'smooth' });
       }
 
-      // Función para registrar asistencia
+      // Registrar asistencia
       function registerAttendance(cedula) {
-        showMessage(`Procesando: ${cedula}...`);
-        
+        showMessage(`<span class="loading"></span> Procesando cédula: ${cedula}...`);
+        manualSubmit.disabled = true;
+
         fetch('/update_sheet', {
           method: 'POST',
           headers: {
@@ -93,73 +156,105 @@
           },
           body: JSON.stringify({ cedula: cedula.trim() })
         })
-        .then(response => {
-          if (!response.ok) throw new Error('Error en el servidor');
-          return response.json();
+        .then(async response => {
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.message || 'Error en el servidor');
+          }
+          return data;
         })
         .then(data => {
           if (data.success) {
-            showMessage(`✓ ${data.message}${data.nombre ? `<br><br>Bienvenido/a: ${data.nombre}` : ''}`);
+            showMessage(`✓ ${data.message}${data.nombre ? `<br><br>Bienvenido/a: <strong>${data.nombre}</strong>` : ''}`);
           } else {
             showMessage(`✗ ${data.message}`, true);
           }
         })
         .catch(error => {
           showMessage(`Error: ${error.message}`, true);
+          console.error('Error:', error);
+        })
+        .finally(() => {
+          manualSubmit.disabled = false;
         });
       }
 
-      // Alternativa manual
-      submitBtn.addEventListener('click', function() {
-        if (cedulaInput.value.trim() === '') {
-          showMessage('Por favor ingresa un número de cédula', true);
+      // Manejo del formulario manual
+      manualSubmit.addEventListener('click', () => {
+        const cedula = cedulaInput.value.trim();
+        if (!cedula) {
+          showMessage('Por favor ingrese un número de cédula', true);
           return;
         }
-        registerAttendance(cedulaInput.value);
+        if (!/^\d+$/.test(cedula)) {
+          showMessage('La cédula debe contener solo números', true);
+          return;
+        }
+        registerAttendance(cedula);
       });
 
-      // Verificar si la librería está cargada
-      if (typeof Html5Qrcode === 'undefined') {
-        showMessage('Error: El escáner QR no está disponible. Usa el ingreso manual.', true);
-        manualInput.style.display = 'block';
-        startBtn.style.display = 'none';
-      } else {
-        // Configurar el escáner QR
-        const html5QrCode = new Html5Qrcode("qr-reader");
-        
-        startBtn.addEventListener('click', function() {
-          startBtn.disabled = true;
-          
-          Html5Qrcode.getCameras()
-            .then(devices => {
-              if (!devices || devices.length === 0) {
-                throw new Error('No se detectaron cámaras');
-              }
-              
-              const cameraId = devices[0].id; // Usar la primera cámara disponible
-              return html5QrCode.start(
-                cameraId,
-                { fps: 10, qrbox: 250 },
-                decodedText => {
-                  registerAttendance(decodedText);
-                },
-                () => {} // No mostrar mensajes de error internos
-              );
-            })
-            .then(() => {
-              startBtn.style.display = 'none';
-            })
-            .catch(err => {
-              showMessage(`Error: ${err.message}`, true);
-              manualInput.style.display = 'block';
-              startBtn.disabled = false;
-            });
-        });
-
-        // Iniciar automáticamente en móviles
-        if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-          startBtn.click();
+      // Configuración del escáner QR
+      function initializeScanner() {
+        if (!window.Html5Qrcode) {
+          showMessage('El escáner QR no está disponible. Use el ingreso manual.', true);
+          fallbackUI.style.display = 'block';
+          return;
         }
+
+        const html5QrCode = new Html5Qrcode("qr-reader");
+        const qrCodeSuccessCallback = (decodedText) => {
+          if (!/^\d+$/.test(decodedText)) {
+            showMessage('El código QR no contiene una cédula válida', true);
+            return;
+          }
+          registerAttendance(decodedText);
+        };
+
+        const config = { 
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          rememberLastUsedCamera: true,
+          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+        };
+
+        Html5Qrcode.getCameras()
+          .then(devices => {
+            if (!devices || devices.length === 0) {
+              throw new Error('No se detectaron cámaras disponibles');
+            }
+            
+            // Preferir cámara trasera en móviles
+            const cameraId = devices.find(d => d.label.toLowerCase().includes("back"))?.id || 
+                            devices.find(d => d.label.toLowerCase().includes("rear"))?.id || 
+                            devices[0].id;
+            
+            return html5QrCode.start(
+              cameraId,
+              config,
+              qrCodeSuccessCallback,
+              (errorMessage) => {
+                // No mostrar todos los errores al usuario
+                console.warn('Advertencia escáner:', errorMessage);
+              }
+            );
+          })
+          .then(() => {
+            console.log('Escáner iniciado correctamente');
+          })
+          .catch(error => {
+            console.error('Error al iniciar escáner:', error);
+            showMessage(`Error: ${error.message}. Use el ingreso manual.`, true);
+            fallbackUI.style.display = 'block';
+          });
+      }
+
+      // Iniciar automáticamente en móviles
+      if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        initializeScanner();
+      } else {
+        // En desktop, mostrar instrucciones
+        showMessage('Haga clic en "Iniciar Escáner" o ingrese la cédula manualmente');
+        fallbackUI.style.display = 'block';
       }
     });
   </script>

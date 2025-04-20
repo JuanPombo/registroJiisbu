@@ -4,31 +4,105 @@ import gspread
 from google.oauth2.service_account import Credentials
 import os
 import json
+from datetime import datetime
 
 app = Flask(__name__, static_folder='.')
 CORS(app)
 
 # Configuración de Google Sheets
-scope = ["https://www.googleapis.com/auth/spreadsheets", 
-         "https://www.googleapis.com/auth/drive"]
+SHEET_NAME = "ASISTENCIA - JIISBU 2025"
+WORKSHEET_NAME = "ASISTENTES"
+COL_CEDULA = 4  # Columna D para cédula
+COL_ASISTENCIA = 8  # Columna H para asistencia
+COL_HORA = 9  # Columna I para hora de registro
 
 def get_credentials():
+    """Obtiene las credenciales de Google Sheets con manejo de errores"""
     creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
     if not creds_json:
-        raise ValueError("No se encontraron las credenciales")
+        raise ValueError("No se configuraron las credenciales en variables de entorno")
+    
     try:
-        return Credentials.from_service_account_info(json.loads(creds_json), scopes=scope)
+        return Credentials.from_service_account_info(json.loads(creds_json), scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ])
     except Exception as e:
-        raise ValueError(f"Error credenciales: {str(e)}")
+        raise ValueError(f"Error en credenciales: {str(e)}")
 
-try:
-    creds = get_credentials()
-    client = gspread.authorize(creds)
-    sheet = client.open("ASISTENCIA - JIISBU 2025").worksheet("ASISTENTES")
-    print("✅ Conexión con Google Sheets establecida")
-except Exception as e:
-    print(f"❌ Error Google Sheets: {str(e)}")
-    sheet = None
+def get_sheet():
+    """Obtiene la hoja de cálculo con reconexión automática"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            creds = get_credentials()
+            client = gspread.authorize(creds)
+            return client.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                app.logger.error(f"Error al conectar con Google Sheets: {str(e)}")
+                return None
+            time.sleep(2 ** attempt)  # Espera exponencial
+
+@app.route('/update_sheet', methods=['POST'])
+def update_sheet():
+    sheet = get_sheet()
+    if not sheet:
+        return jsonify({
+            "success": False,
+            "message": "Error al conectar con la base de datos. Intente nuevamente."
+        }), 500
+
+    try:
+        data = request.get_json()
+        if not data or 'cedula' not in data:
+            return jsonify({
+                "success": False,
+                "message": "Datos de solicitud inválidos"
+            }), 400
+
+        cedula = str(data['cedula']).strip()
+        if not cedula.isdigit():
+            return jsonify({
+                "success": False,
+                "message": "La cédula debe contener solo números"
+            }), 400
+
+        # Buscar la cédula exacta en la columna D
+        try:
+            cell = sheet.find(cedula, in_column=COL_CEDULA)
+        except gspread.exceptions.CellNotFound:
+            return jsonify({
+                "success": False,
+                "message": "Cédula no encontrada en el sistema"
+            }), 404
+
+        # Verificar si ya está registrada
+        if sheet.cell(cell.row, COL_ASISTENCIA).value == "✓":
+            return jsonify({
+                "success": False,
+                "message": "Esta cédula ya fue registrada"
+            }), 400
+
+        # Registrar asistencia
+        sheet.update_cell(cell.row, COL_ASISTENCIA, "✓")
+        sheet.update_cell(cell.row, COL_HORA, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        
+        # Obtener nombre del asistente (asumiendo columna B)
+        nombre = sheet.cell(cell.row, 2).value
+
+        return jsonify({
+            "success": True,
+            "message": "Asistencia registrada exitosamente",
+            "nombre": nombre or ""
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error en update_sheet: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": "Error interno del servidor. Por favor intente más tarde."
+        }), 500
 
 @app.route('/')
 def serve_index():
@@ -37,46 +111,6 @@ def serve_index():
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('.', path)
-
-@app.route('/update_sheet', methods=['POST'])
-def update_sheet():
-    if not sheet:
-        return jsonify({"success": False, "message": "Error con Google Sheets"}), 500
-    
-    try:
-        data = request.get_json()
-        if not data or 'cedula' not in data:
-            return jsonify({"success": False, "message": "Datos inválidos"}), 400
-        
-        cedula = str(data['cedula']).strip()
-        print(f"Buscando cédula: {cedula}")
-        
-        # Obtener todos los registros
-        records = sheet.get_all_records()
-        
-        for idx, row in enumerate(records, start=2):  # Fila 2 es el primer dato
-            if str(row.get('CEDULA', '')).strip() == cedula:
-                # Verificar si ya está registrado
-                if row.get('ASISTENCIA', '') == "✓":
-                    return jsonify({
-                        "success": False,
-                        "message": "Esta cédula ya fue registrada"
-                    }), 400
-                
-                # Actualizar hoja
-                sheet.update_cell(idx, 8, "✓")  # Columna H (8) es ASISTENCIA
-                print(f"✅ Registrada cédula: {cedula}")
-                return jsonify({
-                    "success": True,
-                    "message": "Asistencia registrada exitosamente",
-                    "nombre": row.get('NOMBRE', '')
-                })
-        
-        return jsonify({"success": False, "message": "Cédula no encontrada"}), 404
-    
-    except Exception as e:
-        print(f"❌ Error en update_sheet: {str(e)}")
-        return jsonify({"success": False, "message": f"Error del servidor: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
