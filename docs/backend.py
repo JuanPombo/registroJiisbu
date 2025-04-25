@@ -90,7 +90,7 @@ def update_sheet():
 
         # Fecha actual en hora colombiana
         ahora = hora_colombiana()
-        dia_actual = 28 #-----------------------------------------recuerde configurar el dia -----ahora.day
+        dia_actual = ahora.day #-----------------------------------------recuerde configurar el dia -----ahora.day
 
         if dia_actual not in DIAS_EVENTO:
             return jsonify({
